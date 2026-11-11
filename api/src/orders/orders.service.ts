@@ -42,6 +42,15 @@ function assertValidItems(items: CreateOrderDto['items']): void {
   }
 }
 
+/**
+ * Service fee in integer cents. Multiplies before dividing so the only
+ * non-integer step is the final division, which Math.round resolves
+ * (avoids subtotal * 0.1, where 0.1 is not exact in binary).
+ */
+export function calculateFeeCents(subtotalCents: number): number {
+  return Math.round((subtotalCents * SERVICE_FEE_PERCENT) / 100);
+}
+
 /** Inventory rules for one line (400). */
 function assertAvailable(ticketType: TicketType, quantity: number): void {
   if (ticketType.remaining <= 0) {
@@ -117,8 +126,7 @@ export class OrdersService {
       0,
     );
 
-    // TODO: feeCents should be SERVICE_FEE_PERCENT of subtotalCents, rounded
-    const feeCents = 0;
+    const feeCents = calculateFeeCents(subtotalCents);
 
     const order: Order = {
       id: `ord_${randomUUID()}`,
