@@ -1,4 +1,6 @@
 import { Navigate, useLocation } from 'react-router';
+import { OrderSummary } from '~/components';
+import { feeFromSubtotal } from '~/lib/money';
 import { CheckoutState } from '~/types';
 
 /**
@@ -25,6 +27,15 @@ export function CheckoutPage() {
     return <Navigate to="/" replace />;
   }
 
+  // Preview only: the API recomputes these, and the confirmation page shows
+  // the server's numbers. Same rule as EventDetailPage.
+  const subtotalCents = selection.items.reduce(
+    (sum, item) => sum + item.unitPriceCents * item.quantity,
+    0,
+  );
+  const feeCents = feeFromSubtotal(subtotalCents);
+  const totalCents = subtotalCents + feeCents;
+
   return (
     <main className="mx-auto grid max-w-5xl gap-8 px-4 py-10 md:grid-cols-[1fr_280px]">
       <section className="rounded-2xl bg-white p-6 ring-1 ring-black/5">
@@ -40,9 +51,15 @@ export function CheckoutPage() {
       </section>
       <aside className="h-max rounded-2xl bg-white p-5 ring-1 ring-black/5">
         <h2 className="font-semibold">Resumen</h2>
-        <p className="mt-3 text-sm text-ink/60">
-          Muestra localidades, cargo por servicio y total.
-        </p>
+        <p className="mt-1 text-sm text-ink/60">{selection.eventTitle}</p>
+        <div className="mt-4">
+          <OrderSummary
+            items={selection.items}
+            subtotalCents={subtotalCents}
+            feeCents={feeCents}
+            totalCents={totalCents}
+          />
+        </div>
       </aside>
     </main>
   );
