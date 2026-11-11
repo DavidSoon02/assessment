@@ -8,7 +8,7 @@ import { randomUUID } from 'crypto';
 import { ConfirmOrderDto } from './dto/confirm-order.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { APP_STORE } from '../store/store.constants';
-import { AppStore, Order } from '../store/store';
+import { AppStore, Order, TicketType } from '../store/store';
 
 /** Service fee applied on top of the ticket subtotal. */
 export const SERVICE_FEE_PERCENT = 10;
@@ -42,6 +42,27 @@ function assertValidItems(items: CreateOrderDto['items']): void {
   }
 }
 
+/** Inventory rules for one line (400). */
+function assertAvailable(ticketType: TicketType, quantity: number): void {
+  if (ticketType.remaining <= 0) {
+    throw new BadRequestException(
+      `La localidad ${ticketType.name} está agotada`,
+    );
+  }
+
+  if (quantity > ticketType.remaining) {
+    throw new BadRequestException(
+      `Solo quedan ${ticketType.remaining} entradas de ${ticketType.name}`,
+    );
+  }
+
+  if (quantity > ticketType.maxPerOrder) {
+    throw new BadRequestException(
+      `Máximo ${ticketType.maxPerOrder} entradas de ${ticketType.name} por orden`,
+    );
+  }
+}
+
 @Injectable()
 export class OrdersService {
   constructor(@Inject(APP_STORE) private readonly store: AppStore) {}
@@ -62,7 +83,10 @@ export class OrdersService {
       throw new NotFoundException('Evento no encontrado');
     }
 
-    const items = dto.items.map((line) => {
+    // Resolve and validate every line first; inventory is only touched once
+    // the whole request is known to be valid, so a failure on line 2 never
+    // leaves line 1 half-reserved.
+    const lines = dto.items.map((line) => {
       const ticketType = event.ticketTypes.find(
         (type) => type.id === line.ticketTypeId,
       );
@@ -71,15 +95,20 @@ export class OrdersService {
         throw new NotFoundException('Localidad no encontrada');
       }
 
-      // TODO: reject quantity > remaining and quantity > maxPerOrder
-      // TODO: decrement ticketType.remaining
+      assertAvailable(ticketType, line.quantity);
+
+      return { ticketType, quantity: line.quantity };
+    });
+
+    const items = lines.map(({ ticketType, quantity }) => {
+      ticketType.remaining -= quantity;
 
       return {
         ticketTypeId: ticketType.id,
         name: ticketType.name,
-        quantity: line.quantity,
+        quantity,
         unitPriceCents: ticketType.priceCents,
-        lineTotalCents: ticketType.priceCents * line.quantity,
+        lineTotalCents: ticketType.priceCents * quantity,
       };
     });
 
