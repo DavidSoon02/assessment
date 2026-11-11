@@ -15,21 +15,27 @@ export type BuyerFormValues = yup.InferType<typeof buyerSchema>;
 
 export type BuyerFormProps = {
   onSubmit: (values: BuyerFormValues) => void | Promise<void>;
+  /** Work the parent is still doing after onSubmit resolves (e.g. confirm). */
+  submitting?: boolean;
+  /** Error from the API (sold out, validation…), shown above the button. */
+  error?: string | null;
 };
 
 const inputClass =
   'mt-1 w-full rounded-xl border border-ink/15 bg-white px-3 py-2 outline-none focus:border-accent aria-invalid:border-red-500';
 
-export function BuyerForm({ onSubmit }: BuyerFormProps) {
+export function BuyerForm({ onSubmit, submitting, error }: BuyerFormProps) {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting: isHandlingSubmit },
   } = useForm<BuyerFormValues>({
     resolver: yupResolver(buyerSchema),
     mode: 'onTouched',
     defaultValues: { name: '', email: '' },
   });
+
+  const isSubmitting = isHandlingSubmit || Boolean(submitting);
 
   return (
     <form
@@ -76,6 +82,15 @@ export function BuyerForm({ onSubmit }: BuyerFormProps) {
           </p>
         )}
       </div>
+
+      {error && (
+        <p
+          role="alert"
+          className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          {error}
+        </p>
+      )}
 
       <button
         type="submit"

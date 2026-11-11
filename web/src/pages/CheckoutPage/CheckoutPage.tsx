@@ -1,28 +1,76 @@
-import { Navigate, useLocation } from 'react-router';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router';
+import {
+  ConfirmOrderBody,
+  confirmOrder,
+  CreateOrderBody,
+  createOrder,
+  useApiMutation,
+} from '~/api';
 import { OrderSummary } from '~/components';
 import { feeFromSubtotal } from '~/lib/money';
-import { CheckoutState } from '~/types';
+import { CheckoutState, Order } from '~/types';
 import { BuyerForm, BuyerFormValues } from './BuyerForm';
 
+function errorMessage(error: unknown): string {
+  // fetch() rejects with a TypeError when the API can't be reached at all.
+  if (error instanceof TypeError) {
+    return 'No pudimos conectar con el servidor. Intenta de nuevo.';
+  }
+
+  // apiFetch already turns API errors into the server's message.
+  return error instanceof Error && error.message
+    ? error.message
+    : 'No pudimos procesar tu compra. Intenta de nuevo.';
+}
+
 /**
- * TODO (frontend)
+ * Checkout flow: create the order (holds the tickets), then confirm it with
+ * the buyer, then go to the confirmation page.
  *
- * Wire this page up. You already receive the selected tickets in
- * `location.state` (see CheckoutState).
+ * `useApiMutation(confirmOrder, { id })` needs the order id when the hook is
+ * called, but the id only exists after createOrder resolves. So the created
+ * order is kept in state and the confirm runs in an effect on the next render,
+ * once the hook has been rebuilt with that id.
  *
- * 1. Validate name + email with react-hook-form (Yup is already a dependency).
- * 2. Show a summary with the same 10% fee as the event page (`feeFromSubtotal`).
- * 3. On submit: useApiMutation with `createOrder`, then `confirmOrder`.
- * 4. Surface API errors (sold out, validation) and a submitting state.
- *
- * Suggested route after success: `/orders/:orderId`
- *
- *   const { mutateAsync: create } = useApiMutation<Order, Record<string, never>, CreateOrderBody>(createOrder);
- *   const { mutateAsync: confirm } = useApiMutation<Order, { id: string }, ConfirmOrderBody>(confirmOrder, { id });
+ * Keeping the order also means a retry after a failed confirm reuses the same
+ * pending order instead of creating (and holding tickets for) a second one.
  */
 export function CheckoutPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const selection = location.state as CheckoutState | null;
+
+  const [order, setOrder] = useState<Order | null>(null);
+  const [buyerToConfirm, setBuyerToConfirm] = useState<BuyerFormValues | null>(
+    null,
+  );
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const { mutateAsync: create, isPending: isCreating } = useApiMutation<
+    Order,
+    Record<string, never>,
+    CreateOrderBody
+  >(createOrder);
+
+  const confirmArgs = useMemo(() => ({ id: order?.id ?? '' }), [order]);
+  const { mutate: confirm, isPending: isConfirming } = useApiMutation<
+    Order,
+    { id: string },
+    ConfirmOrderBody
+  >(confirmOrder, confirmArgs, {
+    onSuccess: (confirmed) => {
+      navigate(`/orders/${confirmed.id}`, { replace: true });
+    },
+    onError: (error) => setApiError(errorMessage(error)),
+  });
+
+  useEffect(() => {
+    if (!order || !buyerToConfirm) return;
+
+    setBuyerToConfirm(null);
+    confirm(buyerToConfirm);
+  }, [order, buyerToConfirm, confirm]);
 
   if (!selection?.items.length) {
     return <Navigate to="/" replace />;
@@ -37,17 +85,52 @@ export function CheckoutPage() {
   const feeCents = feeFromSubtotal(subtotalCents);
   const totalCents = subtotalCents + feeCents;
 
-  // Step 3 wires this to createOrder + confirmOrder.
-  const onSubmit = async (_values: BuyerFormValues) => {};
+  const onSubmit = async (buyer: BuyerFormValues) => {
+    setApiError(null);
+
+    if (order) {
+      setBuyerToConfirm(buyer);
+      return;
+    }
+
+    try {
+      const created = await create({
+        eventId: selection.eventId,
+        items: selection.items.map(({ ticketTypeId, quantity }) => ({
+          ticketTypeId,
+          quantity,
+        })),
+      });
+
+      setOrder(created);
+      setBuyerToConfirm(buyer);
+    } catch (error) {
+      setApiError(errorMessage(error));
+    }
+  };
+
+  const isSubmitting = isCreating || isConfirming || buyerToConfirm !== null;
 
   return (
     <main className="mx-auto grid max-w-5xl gap-8 px-4 py-10 md:grid-cols-[1fr_280px]">
       <section className="rounded-2xl bg-white p-6 ring-1 ring-black/5">
-        <h1 className="text-2xl font-semibold tracking-tight">Tus datos</h1>
+        <Link
+          to={`/events/${selection.eventId}`}
+          className="text-sm text-ink/60"
+        >
+          ← Volver al evento
+        </Link>
+        <h1 className="mt-4 text-2xl font-semibold tracking-tight">
+          Tus datos
+        </h1>
         <p className="mt-2 text-sm text-ink/70">
           Completa el checkout para <strong>{selection.eventTitle}</strong>.
         </p>
-        <BuyerForm onSubmit={onSubmit} />
+        <BuyerForm
+          onSubmit={onSubmit}
+          submitting={isSubmitting}
+          error={apiError}
+        />
       </section>
       <aside className="h-max rounded-2xl bg-white p-5 ring-1 ring-black/5">
         <h2 className="font-semibold">Resumen</h2>
