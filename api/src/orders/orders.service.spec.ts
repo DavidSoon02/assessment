@@ -136,6 +136,75 @@ describe('OrdersService', () => {
     });
   });
 
+  describe('create with discount code', () => {
+    const generalRemaining = () =>
+      store.events
+        .find((event) => event.id === 'noche-salsa')
+        ?.ticketTypes.find((type) => type.id === 'salsa-general')?.remaining;
+
+    it('applies SAVE10 to the subtotal and charges the fee on the discounted amount', () => {
+      const order = service.create({
+        eventId: 'noche-salsa',
+        items: [{ ticketTypeId: 'salsa-general', quantity: 2 }],
+        discountCode: 'SAVE10',
+      });
+
+      expect(order.subtotalCents).toBe(5000);
+      expect(order.discountCode).toBe('SAVE10');
+      expect(order.discountCents).toBe(500);
+      expect(order.feeCents).toBe(450); // 10% of 4500, not of 5000
+      expect(order.totalCents).toBe(4950);
+    });
+
+    it('rounds discount and fee to integer cents', () => {
+      // 1 × $18.00 → discount 180, fee 10% of 1620 = 162, total 1782
+      const order = service.create({
+        eventId: 'standup-uio',
+        items: [{ ticketTypeId: 'standup-mesa', quantity: 1 }],
+        discountCode: 'SAVE10',
+      });
+
+      expect(order.discountCents).toBe(180);
+      expect(order.feeCents).toBe(162);
+      expect(order.totalCents).toBe(1782);
+      expect(Number.isInteger(order.totalCents)).toBe(true);
+    });
+
+    it('accepts the code in any case and with surrounding spaces', () => {
+      const order = service.create({
+        eventId: 'noche-salsa',
+        items: [{ ticketTypeId: 'salsa-general', quantity: 1 }],
+        discountCode: '  save10 ',
+      });
+
+      expect(order.discountCode).toBe('SAVE10');
+      expect(order.discountCents).toBe(250);
+    });
+
+    it('has no discount when no code is sent', () => {
+      const order = service.create({
+        eventId: 'noche-salsa',
+        items: [{ ticketTypeId: 'salsa-general', quantity: 1 }],
+      });
+
+      expect(order.discountCode).toBeNull();
+      expect(order.discountCents).toBe(0);
+    });
+
+    it('rejects unknown codes without holding inventory', () => {
+      const before = generalRemaining();
+
+      expect(() =>
+        service.create({
+          eventId: 'noche-salsa',
+          items: [{ ticketTypeId: 'salsa-general', quantity: 1 }],
+          discountCode: 'FREE100',
+        }),
+      ).toThrow(BadRequestException);
+      expect(generalRemaining()).toBe(before);
+    });
+  });
+
   describe('confirm', () => {
     it('marks a pending order as confirmed and stores the buyer', () => {
       const pending = service.create({

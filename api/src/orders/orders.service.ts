@@ -71,6 +71,38 @@ function parseBuyer(dto: ConfirmOrderDto): Buyer {
   return { name, email };
 }
 
+/** Discount codes and the percent they take off the subtotal. */
+export const DISCOUNT_CODES: Readonly<Record<string, number>> = {
+  SAVE10: 10,
+};
+
+/**
+ * Normalizes an optional discount code (trim + uppercase). Returns null when
+ * none was sent; unknown codes are a 400 so a typo is never silently ignored.
+ */
+export function resolveDiscountCode(code: string | undefined): string | null {
+  const normalized = code?.trim().toUpperCase() ?? '';
+
+  if (!normalized) return null;
+
+  if (!(normalized in DISCOUNT_CODES)) {
+    throw new BadRequestException(
+      `El código de descuento ${normalized} no es válido`,
+    );
+  }
+
+  return normalized;
+}
+
+/** Discount in integer cents; same multiply-then-divide rule as the fee. */
+export function calculateDiscountCents(
+  subtotalCents: number,
+  code: string | null,
+): number {
+  if (!code) return 0;
+  return Math.round((subtotalCents * DISCOUNT_CODES[code]) / 100);
+}
+
 /** Inventory rules for one line (400). */
 function assertAvailable(ticketType: TicketType, quantity: number): void {
   if (ticketType.remaining <= 0) {
@@ -105,6 +137,8 @@ export class OrdersService {
    */
   create(dto: CreateOrderDto): Order {
     assertValidItems(dto.items);
+    // Before touching inventory: a bad code must not leave tickets held.
+    const discountCode = resolveDiscountCode(dto.discountCode);
 
     const event = this.store.events.find((item) => item.id === dto.eventId);
 
@@ -146,7 +180,9 @@ export class OrdersService {
       0,
     );
 
-    const feeCents = calculateFeeCents(subtotalCents);
+    const discountCents = calculateDiscountCents(subtotalCents, discountCode);
+    // The fee is charged on what the buyer actually pays for the tickets.
+    const feeCents = calculateFeeCents(subtotalCents - discountCents);
 
     const order: Order = {
       id: `ord_${randomUUID()}`,
@@ -154,8 +190,10 @@ export class OrdersService {
       status: 'pending',
       items,
       subtotalCents,
+      discountCode,
+      discountCents,
       feeCents,
-      totalCents: subtotalCents + feeCents,
+      totalCents: subtotalCents - discountCents + feeCents,
       buyer: null,
       createdAt: new Date().toISOString(),
     };

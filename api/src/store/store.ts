@@ -36,8 +36,15 @@ export type Order = {
   eventId: string;
   status: OrderStatus;
   items: OrderItem[];
+  /** Sum of the ticket lines, before any discount. */
   subtotalCents: number;
+  /** Discount code applied at creation (normalized), or null. */
+  discountCode: string | null;
+  /** Amount taken off the subtotal by the discount code. */
+  discountCents: number;
+  /** Service fee, computed on the discounted subtotal. */
   feeCents: number;
+  /** subtotalCents - discountCents + feeCents */
   totalCents: number;
   buyer: Buyer | null;
   createdAt: string;

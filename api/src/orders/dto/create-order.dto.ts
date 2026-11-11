@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsInt,
+  IsOptional,
   IsString,
   Min,
   ValidateNested,
@@ -25,4 +26,8 @@ export class CreateOrderDto {
   @Type(() => OrderItemDto)
   @ArrayMinSize(1, { message: 'Debes seleccionar al menos una localidad' })
   items: OrderItemDto[];
+
+  @IsOptional()
+  @IsString()
+  discountCode?: string;
 }

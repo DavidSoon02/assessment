@@ -37,6 +37,8 @@ export type Order = {
   status: OrderStatus;
   items: OrderItem[];
   subtotalCents: number;
+  discountCode: string | null;
+  discountCents: number;
   feeCents: number;
   totalCents: number;
   buyer: Buyer | null;

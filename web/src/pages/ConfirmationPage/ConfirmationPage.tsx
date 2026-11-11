@@ -95,6 +95,8 @@ export function ConfirmationPage() {
           <OrderSummary
             items={order.items}
             subtotalCents={order.subtotalCents}
+            discountCents={order.discountCents}
+            discountCode={order.discountCode}
             feeCents={order.feeCents}
             totalCents={order.totalCents}
           />

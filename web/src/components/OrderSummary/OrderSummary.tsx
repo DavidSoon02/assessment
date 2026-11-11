@@ -9,6 +9,9 @@ export type OrderSummaryLine = Pick<
 export type OrderSummaryProps = {
   items: OrderSummaryLine[];
   subtotalCents: number;
+  /** Shown as its own line only when greater than 0. */
+  discountCents?: number;
+  discountCode?: string | null;
   feeCents: number;
   totalCents: number;
 };
@@ -20,6 +23,8 @@ export type OrderSummaryProps = {
 export function OrderSummary({
   items,
   subtotalCents,
+  discountCents = 0,
+  discountCode,
   feeCents,
   totalCents,
 }: OrderSummaryProps) {
@@ -46,6 +51,12 @@ export function OrderSummary({
           <dt>Subtotal</dt>
           <dd className="tabular-nums">{formatUsd(subtotalCents)}</dd>
         </div>
+        {discountCents > 0 && (
+          <div className="flex justify-between text-green-700">
+            <dt>Descuento{discountCode ? ` (${discountCode})` : ''}</dt>
+            <dd className="tabular-nums">−{formatUsd(discountCents)}</dd>
+          </div>
+        )}
         <div className="flex justify-between">
           <dt>Cargo por servicio</dt>
           <dd className="tabular-nums">{formatUsd(feeCents)}</dd>

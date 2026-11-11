@@ -8,9 +8,10 @@ import {
   useApiMutation,
 } from '~/api';
 import { OrderSummary } from '~/components';
-import { feeFromSubtotal } from '~/lib/money';
+import { discountFromSubtotal, feeFromSubtotal } from '~/lib/money';
 import { CheckoutState, Order } from '~/types';
 import { BuyerForm, BuyerFormValues } from './BuyerForm';
+import { DiscountCodeField } from './DiscountCodeField';
 
 function errorMessage(error: unknown): string {
   // fetch() rejects with a TypeError when the API can't be reached at all.
@@ -46,6 +47,7 @@ export function CheckoutPage() {
     null,
   );
   const [apiError, setApiError] = useState<string | null>(null);
+  const [discountCode, setDiscountCode] = useState<string | null>(null);
 
   const { mutateAsync: create, isPending: isCreating } = useApiMutation<
     Order,
@@ -77,13 +79,14 @@ export function CheckoutPage() {
   }
 
   // Preview only: the API recomputes these, and the confirmation page shows
-  // the server's numbers. Same rule as EventDetailPage.
+  // the server's numbers. The fee is charged on the discounted subtotal.
   const subtotalCents = selection.items.reduce(
     (sum, item) => sum + item.unitPriceCents * item.quantity,
     0,
   );
-  const feeCents = feeFromSubtotal(subtotalCents);
-  const totalCents = subtotalCents + feeCents;
+  const discountCents = discountFromSubtotal(subtotalCents, discountCode);
+  const feeCents = feeFromSubtotal(subtotalCents - discountCents);
+  const totalCents = subtotalCents - discountCents + feeCents;
 
   const onSubmit = async (buyer: BuyerFormValues) => {
     setApiError(null);
@@ -100,6 +103,7 @@ export function CheckoutPage() {
           ticketTypeId,
           quantity,
         })),
+        ...(discountCode ? { discountCode } : {}),
       });
 
       setOrder(created);
@@ -139,10 +143,18 @@ export function CheckoutPage() {
           <OrderSummary
             items={selection.items}
             subtotalCents={subtotalCents}
+            discountCents={discountCents}
+            discountCode={discountCode}
             feeCents={feeCents}
             totalCents={totalCents}
           />
         </div>
+        {/* Locked once the order exists: a retry reuses it with its code. */}
+        <DiscountCodeField
+          value={discountCode}
+          onChange={setDiscountCode}
+          disabled={order !== null || isSubmitting}
+        />
       </aside>
     </main>
   );
