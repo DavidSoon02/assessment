@@ -2,6 +2,7 @@ import { Navigate, useLocation } from 'react-router';
 import { OrderSummary } from '~/components';
 import { feeFromSubtotal } from '~/lib/money';
 import { CheckoutState } from '~/types';
+import { BuyerForm, BuyerFormValues } from './BuyerForm';
 
 /**
  * TODO (frontend)
@@ -36,18 +37,17 @@ export function CheckoutPage() {
   const feeCents = feeFromSubtotal(subtotalCents);
   const totalCents = subtotalCents + feeCents;
 
+  // Step 3 wires this to createOrder + confirmOrder.
+  const onSubmit = async (_values: BuyerFormValues) => {};
+
   return (
     <main className="mx-auto grid max-w-5xl gap-8 px-4 py-10 md:grid-cols-[1fr_280px]">
       <section className="rounded-2xl bg-white p-6 ring-1 ring-black/5">
         <h1 className="text-2xl font-semibold tracking-tight">Tus datos</h1>
         <p className="mt-2 text-sm text-ink/70">
           Completa el checkout para <strong>{selection.eventTitle}</strong>.
-          Esta pantalla es tuya: el formulario todavía no envía nada.
         </p>
-        <p className="mt-8 rounded-xl bg-paper px-4 py-3 text-sm text-ink/70">
-          Implementa el formulario aquí. Revisa <code>README.md</code>,{' '}
-          <code>useApiMutation</code> y los endpoints en <code>~/api</code>.
-        </p>
+        <BuyerForm onSubmit={onSubmit} />
       </section>
       <aside className="h-max rounded-2xl bg-white p-5 ring-1 ring-black/5">
         <h2 className="font-semibold">Resumen</h2>
