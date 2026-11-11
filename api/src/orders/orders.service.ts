@@ -8,7 +8,8 @@ import { randomUUID } from 'crypto';
 import { ConfirmOrderDto } from './dto/confirm-order.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { APP_STORE } from '../store/store.constants';
-import { AppStore, Order, TicketType } from '../store/store';
+import { isEmail } from 'class-validator';
+import { AppStore, Buyer, Order, TicketType } from '../store/store';
 
 /** Service fee applied on top of the ticket subtotal. */
 export const SERVICE_FEE_PERCENT = 10;
@@ -49,6 +50,25 @@ function assertValidItems(items: CreateOrderDto['items']): void {
  */
 export function calculateFeeCents(subtotalCents: number): number {
   return Math.round((subtotalCents * SERVICE_FEE_PERCENT) / 100);
+}
+
+/**
+ * Buyer rules (400). Mirrors ConfirmOrderDto for direct service calls and
+ * also rejects whitespace-only names, which @IsNotEmpty lets through.
+ */
+function parseBuyer(dto: ConfirmOrderDto): Buyer {
+  const name = typeof dto.name === 'string' ? dto.name.trim() : '';
+  const email = typeof dto.email === 'string' ? dto.email.trim() : '';
+
+  if (!name) {
+    throw new BadRequestException('El nombre es obligatorio');
+  }
+
+  if (!isEmail(email)) {
+    throw new BadRequestException('El correo no es válido');
+  }
+
+  return { name, email };
 }
 
 /** Inventory rules for one line (400). */
@@ -157,10 +177,16 @@ export class OrdersService {
   confirm(id: string, dto: ConfirmOrderDto): Order {
     const order = this.findById(id);
 
-    // TODO: reject when the order is not pending
+    if (order.status !== 'pending') {
+      throw new BadRequestException(
+        `La orden ya fue confirmada y no se puede confirmar de nuevo`,
+      );
+    }
+
+    const buyer = parseBuyer(dto);
 
     order.status = 'confirmed';
-    order.buyer = { name: dto.name, email: dto.email };
+    order.buyer = buyer;
     return order;
   }
 }
